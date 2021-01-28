@@ -24,6 +24,10 @@ public class ApiRequester {
         properties.load(resourceAsStream);
         String nifiHost = properties.getProperty(NIFI_HOST_PROPERTY_NAME);
         String baseProcessGroupID = properties.getProperty(BASE_PROCESS_GROUP_ID_PROPERTY_NAME);
+        if (nifiHost.isEmpty() || baseProcessGroupID.isEmpty()) {
+            System.err.println("Properties NiFi host and base process group ID is required");
+            System.exit(1);
+        }
         String method = properties.getProperty(METHOD_PROPERTY_NAME);
         boolean includeAncestorGroups = Boolean.parseBoolean(properties.getProperty(INCLUDE_ANCESTOR_GROUPS_PROPERTY_NAME));
         boolean includeDescendantGroups = Boolean.parseBoolean(properties.getProperty(INCLUDE_DESCENDANT_GROUPS_PROPERTY_NAME));
