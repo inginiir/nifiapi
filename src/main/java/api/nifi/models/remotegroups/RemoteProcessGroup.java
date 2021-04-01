@@ -1,19 +1,13 @@
-package api.nifi.models.processgroup;
+package api.nifi.models.remotegroups;
 
 import api.nifi.models.controllerservice.Revision;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class ProcessGroup {
+public class RemoteProcessGroup {
 
     private String id;
-
-    public ProcessGroup() {
-    }
-
-    public ProcessGroup(String baseProcessGroupIdPropertyName) {
-        this.id = baseProcessGroupIdPropertyName;
-    }
+    private Revision revision;
 
     public String getId() {
         return id;
@@ -21,5 +15,13 @@ public class ProcessGroup {
 
     public void setId(String id) {
         this.id = id;
+    }
+
+    public Revision getRevision() {
+        return revision;
+    }
+
+    public void setRevision(Revision revision) {
+        this.revision = revision;
     }
 }

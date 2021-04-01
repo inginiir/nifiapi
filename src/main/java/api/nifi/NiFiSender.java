@@ -1,11 +1,13 @@
 package api.nifi;
 
+import api.nifi.models.remotegroups.RemoteProcessGroup;
 import api.nifi.models.controllerservice.ControllerService;
 import api.nifi.models.controllerservice.ControllerServices;
 import api.nifi.models.processgroup.Connection;
 import api.nifi.models.processgroup.Connections;
 import api.nifi.models.processgroup.ProcessGroup;
 import api.nifi.models.processgroup.ProcessGroups;
+import api.nifi.models.remotegroups.RemoteProcessGroups;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHeaders;
@@ -32,6 +34,8 @@ import java.util.stream.Collectors;
 public class NiFiSender {
 
     public static final String DISABLED = "DISABLED";
+    public static final String NIFI_PATH_GET_ALL_RG = "/nifi-api/process-groups/%s/remote-process-groups";
+    private static final String NIFI_PATH_CHANGE_STATE_RG = "/nifi-api/remote-process-groups/%s/run-status";
     public static String NIFI_PATH_GET_ALL_CS = "/nifi-api/flow/process-groups/%s/controller-services";
     public static String NIFI_PATH_CHANGE_STATE_CS = "/nifi-api/controller-services/%s/run-status";
     public static String NIFI_PATH_DELETE_CS_BY_ID = "/nifi-api/controller-services/%s";
@@ -93,11 +97,9 @@ public class NiFiSender {
         } catch (IOException | URISyntaxException e) {
             LOGGER.info("Group don't have another groups");
         }
-
         for (ProcessGroup processGroup : processGroups.getProcessGroups()) {
             getAllProcessGroups(host, processGroup.getId());
         }
-
     }
 
     private static List<Connection> getAllConnections(String nifiHost, String processGroupId) {
@@ -208,7 +210,7 @@ public class NiFiSender {
             System.out.println("There are no controller services without referenced components");
             System.exit(0);
         }
-        System.out.printf("Attention! %d precess groups will be deleted. Enter 'yes' to delete, enter anything else to cancel\n", size);
+        System.out.printf("Attention! %d controller services will be deleted. Enter 'yes' to delete, enter anything else to cancel\n", size);
         Scanner scanner = new Scanner(System.in);
         String answer = scanner.next();
         if (answer.equalsIgnoreCase("yes") || answer.equalsIgnoreCase("y")) {
@@ -271,5 +273,69 @@ public class NiFiSender {
             LOGGER.warning(e.getMessage());
         }
         return controllerService;
+    }
+
+    public static void changeStateAllRemotesGroup(String nifiHost, String processGroupId, String state) {
+        getAllProcessGroups(nifiHost, processGroupId);
+        processGroupsList.forEach(processGroup -> getRemoteGroups(processGroup.getId(), nifiHost)
+                .forEach(remoteProcessGroup -> changeStateRemoteGroup(remoteProcessGroup.getId(), state, remoteProcessGroup.getRevision().getVersion(), nifiHost)));
+    }
+
+    private static void changeStateRemoteGroup(String remoteGroupId, String state, Integer version, String nifiHost) {
+        try (CloseableHttpClient client = HttpClients.createDefault()) {
+            URIBuilder uriBuilder = new URIBuilder();
+            URI uri = uriBuilder
+                    .setScheme(HttpHost.DEFAULT_SCHEME_NAME)
+                    .setHost(nifiHost)
+                    .setPath(String.format(NIFI_PATH_CHANGE_STATE_RG, remoteGroupId))
+                    .build();
+            HttpPut put = new HttpPut(uri);
+            String bodyJson = String.format("{\"state\": \"%s\",\"revision\": {\"version\": \"%d\"}}", state, version);
+            HttpEntity entity = new StringEntity(bodyJson);
+            put.setEntity(entity);
+            put.setHeader(HttpHeaders.ACCEPT, ContentType.APPLICATION_JSON.getMimeType());
+            put.setHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.getMimeType());
+            try (CloseableHttpResponse response = client.execute(put)) {
+                int statusCode = response.getStatusLine().getStatusCode();
+                String body = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+                if (isSuccess(statusCode)) {
+                    LOGGER.info(String.format("Remote group with id %s is %s", remoteGroupId, state));
+                } else {
+                    LOGGER.warning(String.format("Remote group wasn't change state. Http status code %d. Error message: %s", statusCode, body));
+                }
+            }
+        } catch (IOException | URISyntaxException e) {
+            LOGGER.warning(e.getMessage());
+        }
+    }
+
+    private static List<RemoteProcessGroup> getRemoteGroups(String processGroupId, String nifiHost) {
+        RemoteProcessGroups remoteProcessGroups = new RemoteProcessGroups();
+        try (CloseableHttpClient client = HttpClients.createDefault()) {
+            URIBuilder uriBuilder = new URIBuilder();
+            URI uri = uriBuilder
+                    .setScheme(HttpHost.DEFAULT_SCHEME_NAME)
+                    .setHost(nifiHost)
+                    .setPath(String.format(NIFI_PATH_GET_ALL_RG, processGroupId))
+                    .build();
+            HttpGet get = new HttpGet(uri);
+            try (CloseableHttpResponse response = client.execute(get)) {
+                int statusCode = response.getStatusLine().getStatusCode();
+                String body = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+                if (isSuccess(statusCode)) {
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    remoteProcessGroups = objectMapper.readValue(body, RemoteProcessGroups.class);
+                } else {
+                    LOGGER.warning(String.format("Error. Http status code %d. Error message: %s", statusCode, body));
+                }
+            }
+        } catch (IOException | URISyntaxException e) {
+            LOGGER.warning(e.getMessage());
+        }
+        return remoteProcessGroups.getRemoteProcessGroups();
+    }
+
+    private static boolean isSuccess(int statusCode) {
+        return statusCode == HttpStatus.SC_CREATED || statusCode == HttpStatus.SC_ACCEPTED || statusCode == HttpStatus.SC_OK;
     }
 }

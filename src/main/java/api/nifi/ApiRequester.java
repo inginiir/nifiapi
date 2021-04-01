@@ -17,6 +17,8 @@ public class ApiRequester {
     public static final String METHOD_PROPERTY_NAME = "method";
     public static final String DELETE_CONTROLLER_SERVICES = "cs";
     public static final String CLEAR_QUEUES = "queue";
+    public static final String DISABLE_REMOTE = "rg";
+    public static final String STOPPED = "STOPPED";
 
     public static void main(String[] args) throws IOException {
         Properties properties = new Properties();
@@ -31,13 +33,19 @@ public class ApiRequester {
         String method = properties.getProperty(METHOD_PROPERTY_NAME);
         boolean includeAncestorGroups = Boolean.parseBoolean(properties.getProperty(INCLUDE_ANCESTOR_GROUPS_PROPERTY_NAME));
         boolean includeDescendantGroups = Boolean.parseBoolean(properties.getProperty(INCLUDE_DESCENDANT_GROUPS_PROPERTY_NAME));
-
-        if (method.equalsIgnoreCase(DELETE_CONTROLLER_SERVICES)) {
-            NiFiSender.deleteAllControllerService(nifiHost, baseProcessGroupID, includeAncestorGroups, includeDescendantGroups);
-        } else if (method.equalsIgnoreCase(CLEAR_QUEUES)) {
-            NiFiSender.clearAllQueue(nifiHost, baseProcessGroupID);
-        } else {
-            System.err.println("Method doesn't supported");
+        switch (method) {
+            case DELETE_CONTROLLER_SERVICES:
+                NiFiSender.deleteAllControllerService(nifiHost, baseProcessGroupID, includeAncestorGroups, includeDescendantGroups);
+                break;
+            case CLEAR_QUEUES:
+                NiFiSender.clearAllQueue(nifiHost, baseProcessGroupID);
+                break;
+            case DISABLE_REMOTE:
+                NiFiSender.changeStateAllRemotesGroup(nifiHost, baseProcessGroupID, STOPPED);
+                break;
+            default:
+                System.err.println("Method doesn't supported");
+                break;
         }
     }
 }
